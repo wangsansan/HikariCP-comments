@@ -70,6 +70,7 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
    private final AtomicInteger waiters;
    private volatile boolean closed;
 
+   // handoff：传球，传递。此处表达的含义是生产者传递过来的连接
    private final SynchronousQueue<T> handoffQueue;
 
    public interface IConcurrentBagEntry
@@ -144,6 +145,13 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
          for (T bagEntry : sharedList) {
             if (bagEntry.compareAndSet(STATE_NOT_IN_USE, STATE_IN_USE)) {
                // If we may have stolen another waiter's connection, request another bag add.
+               /**
+                * 根据注释，说明 listener 的 addBagItem 是指需要创建新的连接个数
+                * 此时的 waiter 可能获取的是其他 waiter 通知创建的连接，所以在获得连接之后需要判断下，自己是不是唯一连接
+                * 也就是判断当前线程是不是唯一的waiter，如果不是，那么还得通知创建新的连接
+                * 有点类似 ReentrantLock 里的非公平锁了，过来先抢一个
+                 */
+
                if (waiting > 1) {
                   listener.addBagItem(waiting - 1);
                }
@@ -157,6 +165,7 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
          do {
             final var start = currentTime();
             final T bagEntry = handoffQueue.poll(timeout, NANOSECONDS);
+            // 此处的等待创建连接是可以接受 timeout 时，还是拿到 null 的
             if (bagEntry == null || bagEntry.compareAndSet(STATE_NOT_IN_USE, STATE_IN_USE)) {
                return bagEntry;
             }
@@ -164,9 +173,13 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
             timeout -= elapsedNanos(start);
          } while (timeout > 10_000);
 
+         // 还是可能拿不到生产者创建新连接
          return null;
       }
       finally {
+         /**
+          * 如果没获取到连接，把自己从waiter队列里删除
+          */
          waiters.decrementAndGet();
       }
    }
@@ -179,12 +192,25 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
     * @param bagEntry the value to return to the bag
     * @throws NullPointerException if value is null
     * @throws IllegalStateException if the bagEntry was not borrowed from the bag
+    * 归还连接
     */
    public void requite(final T bagEntry)
    {
+      /**
+       * 此处不用cas或者加锁的原因是因为该连接被当前线程获取了，只有当前线程能够操作该连接为 not in use
+       * 其他线程操作时都会通过线程安全的cas方法试图获取该线程，所以当前线程操作该连接一定是线程安全的
+       */
       bagEntry.setState(STATE_NOT_IN_USE);
 
+      // 遍历当前的waiter
       for (var i = 0; waiters.get() > 0; i++) {
+         /**
+          * 两种情况：
+          * 1. 如果连接被其他线程抢走了
+          * 2. 如果没被抢走，就把该连接放到 handoffQueue 里，提供给其他 waiter
+          * 当然可能返回false，譬如当前没有线程在遍历 sharedList，也没有线程在 poll 我们的 handoffQueue
+          * 当waiters.get()大于0，代表存在等待者，所以继续下一次循环
+          */
          if (bagEntry.getState() != STATE_NOT_IN_USE || handoffQueue.offer(bagEntry)) {
             return;
          }
@@ -195,6 +221,10 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
             Thread.yield();
          }
       }
+      /**
+       * 如果走到这儿了，说明连接状态改为 not in use了，且没有waiter等待该连接
+       * 那就把该连接放到当前线程的 threadLocal 里，方便下次直接用，这样获取到可用连接的概率大
+       */
 
       final var threadLocalList = threadList.get();
       if (threadLocalList.size() < 50) {
