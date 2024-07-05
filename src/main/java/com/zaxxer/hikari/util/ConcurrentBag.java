@@ -234,6 +234,7 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
 
    /**
     * Add a new object to the bag for others to borrow.
+    * 增加一个连接到连接池中
     *
     * @param bagEntry an object to add to the bag
     */
@@ -247,6 +248,9 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
       sharedList.add(bagEntry);
 
       // spin until a thread takes it or none are waiting
+      /**
+       * 如果有waiter在等待连接，就自旋直到该创建出来的连接被使用
+       */
       while (waiters.get() > 0 && bagEntry.getState() == STATE_NOT_IN_USE && !handoffQueue.offer(bagEntry)) {
          Thread.yield();
       }
@@ -273,6 +277,9 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
          LOGGER.warn("Attempt to remove an object from the bag that does not exist: {}", bagEntry);
       }
 
+      /**
+       * 如果是 weakReference 就不用remove了，因为弱引用会被gc的时候给除掉
+       */
       threadList.get().remove(bagEntry);
 
       return removed;
