@@ -214,9 +214,10 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
          if (bagEntry.getState() != STATE_NOT_IN_USE || handoffQueue.offer(bagEntry)) {
             return;
          } else if ((i & 0xff) == 0xff) {
+            // 每隔255次就sleep 10 纳秒
             parkNanos(MICROSECONDS.toNanos(10));
          } else {
-            // 如果sleep了0xff（255）次之后，当前线程还是没有被抢走，那么当前线程便放弃CPU时间片
+            // 大多数时间就直接 yield，放弃当前时间片
             Thread.yield();
          }
       }
