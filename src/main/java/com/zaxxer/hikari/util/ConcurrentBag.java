@@ -207,9 +207,9 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
          /**
           * 两种情况：
           * 1. 如果连接被其他线程抢走了
-          * 2. 如果没被抢走，就把该连接放到 handoffQueue 里，提供给其他 waiter
+          * 2. 如果没被抢走，就把该连接放到 handoffQueue 里，提供给其他 waiter，如果没有waiter在poll，那么此时offer可能会失败
           * 当然可能返回false，譬如当前没有线程在遍历 sharedList，也没有线程在 poll 我们的 handoffQueue
-          * 当waiters.get()大于0，代表存在等待者，所以继续下一次循环
+          * 继续下一次循环，根据 waiter.get() 来判断是否还有等待者
           */
          if (bagEntry.getState() != STATE_NOT_IN_USE || handoffQueue.offer(bagEntry)) {
             return;
