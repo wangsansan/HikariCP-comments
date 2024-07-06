@@ -146,7 +146,8 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
             if (bagEntry.compareAndSet(STATE_NOT_IN_USE, STATE_IN_USE)) {
                // If we may have stolen another waiter's connection, request another bag add.
                /**
-                * 根据注释，说明 listener 的 addBagItem 是指需要创建新的连接个数
+                * addBagItem 方法的逻辑就是：判断是否需要创建一个新的连接，放到了连接池里。
+                *    如果等待的 waiter 数目大于了线程池大小；也就是等待连接的线程超过了正在创建的线程个数。大概是防止某个线程提交了创建连接，但是又不要连接的情况
                 * 此时的 waiter 可能获取的是其他 waiter 通知创建的连接，所以在获得连接之后需要判断下，自己是不是唯一连接
                 * 也就是判断当前线程是不是唯一的waiter，如果不是，那么还得通知创建新的连接
                 * 有点类似 ReentrantLock 里的非公平锁了，过来先抢一个

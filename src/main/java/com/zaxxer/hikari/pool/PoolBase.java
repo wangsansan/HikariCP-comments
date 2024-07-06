@@ -345,6 +345,7 @@ abstract class PoolBase
 
    /**
     * Obtain connection from data source.
+    * 创建连接，并针对连接进行一些初始化工作
     *
     * @return a Connection connection
     */
@@ -356,12 +357,12 @@ abstract class PoolBase
       try {
          var username = config.getUsername();
          var password = config.getPassword();
-
+         // 获取数据库连接
          connection = (username == null) ? dataSource.getConnection() : dataSource.getConnection(username, password);
          if (connection == null) {
             throw new SQLTransientConnectionException("DataSource returned null unexpectedly");
          }
-
+         // 根据配置，针对数据库连接进行一些操作
          setupConnection(connection);
          lastConnectionFailure.set(null);
          return connection;
@@ -411,6 +412,7 @@ abstract class PoolBase
 
          checkDriverSupport(connection);
 
+         // 事务级别：RR还是RC
          if (transactionIsolation != defaultTransactionIsolation) {
             connection.setTransactionIsolation(transactionIsolation);
          }
@@ -423,6 +425,7 @@ abstract class PoolBase
             connection.setSchema(schema);
          }
 
+         // 如果连接有初始化SQL，就直接执行
          executeSql(connection, config.getConnectionInitSql(), true);
 
          setNetworkTimeout(connection, networkTimeout);

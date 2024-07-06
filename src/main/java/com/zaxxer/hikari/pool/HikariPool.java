@@ -68,6 +68,7 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
    private static final String EVICTED_CONNECTION_MESSAGE = "(connection was evicted)";
    private static final String DEAD_CONNECTION_MESSAGE = "(connection is dead)";
 
+   // 创建连接的creator，
    private final PoolEntryCreator poolEntryCreator = new PoolEntryCreator();
    private final PoolEntryCreator postFillPoolEntryCreator = new PoolEntryCreator("After adding ");
    private final ThreadPoolExecutor addConnectionExecutor;
@@ -458,6 +459,7 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
    private PoolEntry createPoolEntry()
    {
       try {
+         // 创建一个新的连接池实例，也就是一个新的连接
          final var poolEntry = newPoolEntry();
 
          final var maxLifetime = config.getMaxLifetime();
@@ -720,6 +722,7 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
          var backoffMs = 10L;
          var added = false;
          try {
+            // 创建一个新的数据库连接并放到连接池里
             while (shouldContinueCreating()) {
                final var poolEntry = createPoolEntry();
                if (poolEntry != null) {
@@ -754,8 +757,11 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
        * @return true if we should create a connection, false if the need has disappeared
        */
       private synchronized boolean shouldContinueCreating() {
-         return poolState == POOL_NORMAL && getTotalConnections() < config.getMaximumPoolSize() &&
-            (getIdleConnections() < config.getMinimumIdle() || connectionBag.getWaitingThreadCount() > getIdleConnections());
+         return poolState == POOL_NORMAL &&
+            getTotalConnections() < config.getMaximumPoolSize() &&
+            (getIdleConnections() < config.getMinimumIdle() ||
+               connectionBag.getWaitingThreadCount() > getIdleConnections()
+            );
       }
    }
 
